@@ -13,21 +13,29 @@ public class Planilha {
 
     public static List<String> extrairCnpjs(String caminhoArquivo) {
         List<String> cnpjs = new ArrayList<>();
-        int colunaDoCnpj = 3;
+        int colunaDoCnpj = 3;       // Coluna D
+        int colunaDoFaturamento = 4; // Coluna E
 
         try (FileInputStream fis = new FileInputStream(caminhoArquivo);
              Workbook workbook = new XSSFWorkbook(fis)) {
 
             Sheet sheet = workbook.getSheetAt(0);
-            DataFormatter formatter = new DataFormatter(); // Transforma qualquer célula em texto seguro
+            DataFormatter formatter = new DataFormatter();
 
-            for (int i = 1; i <= sheet.getLastRowNum(); i++) { // Pula o cabeçalho
+            for (int i = 1; i <= sheet.getLastRowNum(); i++) {
                 Row row = sheet.getRow(i);
-                if (row != null && row.getCell(colunaDoCnpj) != null) {
-                    String cnpj = formatter.formatCellValue(row.getCell(colunaDoCnpj));
-                    // Pega só se não estiver em branco
-                    if (!cnpj.trim().isEmpty()) {
+                if (row != null) {
+                    Cell cellCnpj = row.getCell(colunaDoCnpj);
+                    Cell cellFaturamento = row.getCell(colunaDoFaturamento);
+
+                    String cnpj = cellCnpj != null ? formatter.formatCellValue(cellCnpj) : "";
+                    String faturamentoAtual = cellFaturamento != null ? formatter.formatCellValue(cellFaturamento) : "";
+
+                    // PULO DO GATO: Só adiciona na fila do robô se tiver CNPJ E o faturamento estiver VAZIO
+                    if (!cnpj.trim().isEmpty() && faturamentoAtual.trim().isEmpty()) {
                         cnpjs.add(cnpj);
+                    } else if (!faturamentoAtual.trim().isEmpty()) {
+                        System.out.println("Pulando CNPJ " + cnpj + " (Já possui faturamento na planilha)");
                     }
                 }
             }
