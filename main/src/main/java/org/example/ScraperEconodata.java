@@ -43,7 +43,7 @@ public class ScraperEconodata {
                 WebDriverWait wait = new WebDriverWait(driver, Duration.ofSeconds(15));
 
                 // 1. Vai direto para a URL da ferramenta
-                driver.get("https://app.econodata.com.br/ferramentas/consulta-empresa");
+                driver.get("https://www.econodata.com.br/consulta-empresa");
 
                 // 2. Preenche a barra de pesquisa
                 WebElement barraPesquisa = wait.until(ExpectedConditions.visibilityOfElementLocated(By.xpath("//input[@placeholder='Digite o nome da empresa ou CNPJ']")));
