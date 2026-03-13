@@ -5,7 +5,7 @@ import java.util.Map;
 
 public class Main {
     public static void main(String[] args) {
-        String caminhoPlanilha = "COLOCAR CAMINHO DO ARQUIVO AQ";
+        String caminhoPlanilha = "CAMINHO DO ARQUIVO AQUI";
 
         System.out.println("Iniciando extração de dados...");
 

@@ -92,7 +92,7 @@ public class ScraperEconodata {
         WebDriver driver = new ChromeDriver(options);
 
         try {
-            driver.get("https://app.econodata.com.br/ferramentas/consulta-empresa");
+            driver.get("https://www.econodata.com.br/consulta-empresa");
             WebDriverWait wait = new WebDriverWait(driver, Duration.ofSeconds(15));
 
             // 1. Clica no botão "Entre"
