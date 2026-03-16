@@ -9,6 +9,7 @@ import org.openqa.selenium.chrome.ChromeOptions;
 import org.openqa.selenium.support.ui.ExpectedConditions;
 import org.openqa.selenium.support.ui.WebDriverWait;
 
+import javax.swing.JOptionPane;
 import java.time.Duration;
 import java.util.*;
 
@@ -18,7 +19,7 @@ public class ScraperEconodata {
 
     public void adicionarConta(String email, String senha) {
         filaContas.add(new Conta(email, senha));
-        // A senha não será mais usada no site, mas mantemos o formato para não quebrar a sua Main
+        // a senha não será mais usada no site, mas mantive o formato para não quebrar a main
     }
 
     public Map<String, String> buscarFaturamentos(List<String> cnpjs) {
@@ -36,60 +37,83 @@ public class ScraperEconodata {
                     break;
                 }
                 driver = iniciarNavegador(contaAtual);
+
+                // se falhar miseravelmente no login, pula pra proxima conta
+                if (driver == null) {
+                    i--;
+                    continue;
+                }
             }
 
             try {
                 System.out.println("Buscando CNPJ: " + cnpj + " usando conta: " + contaAtual.email);
                 WebDriverWait wait = new WebDriverWait(driver, Duration.ofSeconds(15));
 
-                // 1. Zera a tela na busca
+                // 1. zera a tela na busca
                 driver.get("https://www.econodata.com.br/consulta-empresa");
+                Thread.sleep(2000); // respiro pra rede
 
-                // 2. Digita e clica em pesquisar
+                // limpa o banner de cookies se ele estiver na tela
+                fecharBannerCookies(driver);
+
+                // 2. digita e clica em pesquisar
                 WebElement barraPesquisa = wait.until(ExpectedConditions.visibilityOfElementLocated(By.xpath("//input[@placeholder='Digite o nome da empresa ou CNPJ']")));
                 barraPesquisa.clear();
                 barraPesquisa.sendKeys(cnpj);
+                Thread.sleep(1000); // respiro após digitar
                 driver.findElement(By.xpath("//button[contains(., 'Pesquisar')]")).click();
 
-                // 3. Desce a tela levemente para o resultado aparecer bem (Evita que o rodapé cubra o clique)
-                Thread.sleep(1500);
+                // 3. desce a tela levemente
+                Thread.sleep(2000); // respiro pra busca carregar
                 ((JavascriptExecutor) driver).executeScript("window.scrollBy(0, 300)");
 
-                // 4. Clica na empresa nos resultados (procura o CNPJ na tela)
-                WebElement linkEmpresa = wait.until(ExpectedConditions.elementToBeClickable(By.xpath("//*[contains(text(), '" + cnpj + "')]")));
-                linkEmpresa.click();
+                // 4. acha o resultado e força o clique via javascript
+                System.out.println("aguardando resultado da busca aparecer...");
+                WebElement linkEmpresa = wait.until(ExpectedConditions.presenceOfElementLocated(By.xpath("//*[contains(text(), '" + cnpj + "')]/following::a[1]")));
+                ((JavascriptExecutor) driver).executeScript("arguments[0].click();", linkEmpresa);
 
-                // 5. Espera a página da empresa carregar e acha o "Faturamento Anual"
-                WebElement labelFaturamento = wait.until(ExpectedConditions.visibilityOfElementLocated(By.xpath("//*[contains(text(), 'Faturamento Anual')]")));
+                // 5. espera a página da empresa carregar
+                System.out.println("entrando na ficha da empresa...");
+                Thread.sleep(2000); // respiro pra carregar a ficha inteira
+                WebElement primeiroBotaoDesbloquear = wait.until(ExpectedConditions.presenceOfElementLocated(By.xpath("(//button[contains(., 'Desbloquear')])[1]")));
 
-                // 6. Clica no PRIMEIRO botão Desbloquear (aquele abaixo do Faturamento Anual)
-                WebElement primeiroBotaoDesbloquear = labelFaturamento.findElement(By.xpath("following::button[contains(., 'Desbloquear')][1]"));
+                // mais uma garantia de que cookies não voltaram a atrapalhar
+                fecharBannerCookies(driver);
+
+                // 6. rola a tela para o botão ficar exatamente no meio e clica fisicamente
+                ((JavascriptExecutor) driver).executeScript("arguments[0].scrollIntoView({block: 'center'});", primeiroBotaoDesbloquear);
+                Thread.sleep(2000); // respiro após rolar a tela
+                System.out.println("clicando no primeiro botão de desbloqueio...");
                 primeiroBotaoDesbloquear.click();
 
-                // 7. Espera o modal do cachorro aparecer contendo o aviso de 1 crédito
-                WebElement avisoCredito = wait.until(ExpectedConditions.visibilityOfElementLocated(By.xpath("//*[contains(text(), 'consumir 1 crédito')]")));
+                // 7. espera o modal do cachorro
+                System.out.println("aguardando modal do cachorrinho...");
+                WebElement tituloModal = wait.until(ExpectedConditions.visibilityOfElementLocated(By.xpath("//*[contains(text(), 'Liberar os dados')]")));
+                Thread.sleep(2000); // respiro pro modal estabilizar na tela
 
-                // 8. Clica no SEGUNDO botão Desbloquear dentro do modal
-                WebElement segundoBotaoDesbloquear = avisoCredito.findElement(By.xpath("following::button[contains(., 'Desbloquear')]"));
-                segundoBotaoDesbloquear.click();
+                // 8. acha o botão desbloquear abaixo do título e clica com js
+                System.out.println("confirmando o uso do crédito...");
+                WebElement segundoBotaoDesbloquear = tituloModal.findElement(By.xpath("following::button[contains(., 'Desbloquear')]"));
+                ((JavascriptExecutor) driver).executeScript("arguments[0].click();", segundoBotaoDesbloquear);
 
-                // 9. Espera a animação rodar e o texto "R$" aparecer no lugar do botão
-                Thread.sleep(2000);
-                WebElement valorFaturamento = labelFaturamento.findElement(By.xpath("following::*[contains(text(), 'R$')][1]"));
+                // 9. espera ativamente pelo valor "r$" aparecer (sem chutar o tempo, espera ele ficar visível)
+                System.out.println("aguardando a rede processar e o valor ser revelado...");
+                WebElement valorFaturamento = wait.until(ExpectedConditions.visibilityOfElementLocated(By.xpath("//*[contains(text(), 'Faturamento Anual')]/following::*[contains(text(), 'R$')][1]")));
 
                 String faturamentoExtraido = valorFaturamento.getText();
                 resultados.put(cnpj, faturamentoExtraido);
 
-                System.out.println("Sucesso! Faturamento: " + faturamentoExtraido);
-                Thread.sleep(2000);
+                System.out.println("sucesso! faturamento: " + faturamentoExtraido);
+                Thread.sleep(2000); // respiro final antes de ir pro próximo cnpj
 
             } catch (Exception e) {
-                System.out.println("Erro ao buscar o CNPJ " + cnpj + ". Trocando de conta ou falha na extração.");
+                System.out.println("erro ao processar o cnpj " + cnpj);
+                System.out.println("motivo exato do erro: " + e.getMessage());
                 if (driver != null) {
                     driver.quit();
                 }
                 driver = null;
-                i--; // Tenta o mesmo CNPJ com a próxima conta
+                i--; // tenta o mesmo cnpj com a próxima conta
             }
         }
 
@@ -110,36 +134,76 @@ public class ScraperEconodata {
             WebDriverWait wait = new WebDriverWait(driver, Duration.ofSeconds(15));
             Thread.sleep(2000);
 
-            // Clica em Entre
-            WebElement botaoEntre = wait.until(ExpectedConditions.elementToBeClickable(By.xpath("//a[contains(text(), 'Entre')] | //button[contains(text(), 'Entre')] | //*[text()='Entre']")));
-            botaoEntre.click();
+            // clica em entre
+            WebElement botaoEntre = wait.until(ExpectedConditions.presenceOfElementLocated(By.xpath("//*[contains(text(), 'Entre') and (self::button or self::a)] | //button[contains(text(), 'Entre')]")));
+            ((JavascriptExecutor) driver).executeScript("arguments[0].click();", botaoEntre);
 
-            // Digita E-mail e clica em Continuar
-            WebElement campoEmail = wait.until(ExpectedConditions.visibilityOfElementLocated(By.xpath("//input[@placeholder='Insira seu e-mail']")));
+            // digita e-mail
+            WebElement campoEmail = wait.until(ExpectedConditions.visibilityOfElementLocated(By.xpath("//input[@placeholder='Insira seu e-mail' or @type='email']")));
             campoEmail.sendKeys(conta.email);
-            driver.findElement(By.xpath("//button[contains(text(), 'Continuar')]")).click();
 
-            //sistema pra esperar logar
+            // clica em continuar
+            WebElement botaoContinuar = driver.findElement(By.xpath("//button[contains(text(), 'Continuar')]"));
+            ((JavascriptExecutor) driver).executeScript("arguments[0].click();", botaoContinuar);
+
+            System.out.println("esperando a tela do envelope carregar...");
+            wait.until(ExpectedConditions.visibilityOfElementLocated(By.xpath("//*[contains(text(), 'Aguardando confirmação') or contains(text(), 'Que bom te ver')]")));
+            Thread.sleep(1500);
+
             System.out.println("=========================================================");
-            System.out.println("O Link foi enviado para: " + conta.email);
-            System.out.println("Corre no email ai e confirma, tem 20 segundos");
+            System.out.println("o link foi enviado para: " + conta.email);
+            System.out.println("aguardando você colar o link na janelinha que abriu...");
             System.out.println("=========================================================");
 
-            // Pausa de 20 segundos
-            Thread.sleep(20000);
+            String linkMagico = JOptionPane.showInputDialog(
+                    null,
+                    "o e-mail foi enviado para: " + conta.email + "\n\n1. vá no seu e-mail e copie o link do botão.\n2. cole o link abaixo e clique em ok:",
+                    "aguardando login",
+                    JOptionPane.WARNING_MESSAGE
+            );
 
-            System.out.println("Retomando a automação...");
+            if (linkMagico == null || linkMagico.trim().isEmpty()) {
+                throw new Exception("operação cancelada ou link vazio inserido na caixa.");
+            }
+
+            System.out.println("link recebido! injetando login...");
+            driver.get(linkMagico.trim());
+
+            Thread.sleep(5000);
+
+            fecharBannerCookies(driver);
+
+            System.out.println("retomando a automação...");
 
         } catch (Exception e) {
-            System.err.println("Erro no processo de login com " + conta.email + ": " + e.getMessage());
+            System.err.println("erro crítico no processo de login com " + conta.email + ": " + e.getMessage());
+            if (driver != null) {
+                driver.quit();
+            }
+            return null;
         }
 
         return driver;
     }
 
+    private void fecharBannerCookies(WebDriver driver) {
+        try {
+            List<WebElement> botoesCookie = driver.findElements(By.xpath("//button[contains(translate(text(), 'ACEIT', 'aceit'), 'aceit') or contains(translate(text(), 'ENTEND', 'entend'), 'entend') or contains(translate(text(), 'CONCORD', 'concord'), 'concord') or contains(translate(text(), 'OK', 'ok'), 'ok')]"));
+            for (WebElement btn : botoesCookie) {
+                if (btn.isDisplayed()) {
+                    ((JavascriptExecutor) driver).executeScript("arguments[0].click();", btn);
+                    Thread.sleep(1500);
+                    break;
+                }
+            }
+        } catch (Exception ignore) {
+        }
+    }
+
     private static class Conta {
         String email;
-        String senha; //mantive por preguica de refazer a main
+        String senha;
+        // mantive por preguica de refazer a main
         Conta(String email, String senha) {
             this.email = email;
             this.senha = senha;
